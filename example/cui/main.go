@@ -2,13 +2,17 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/agl/xmpp"
 	"github.com/jroimartin/gocui"
 	"github.com/rakoo/goax"
 )
@@ -20,9 +24,53 @@ var (
 	kx string
 )
 
+type config struct {
+	Jid                     string `json:"jid"`
+	Password                string `json:"password"`
+	ServerCertificateSHA256 string
 }
 
 func main() {
+	// The xmpp connection
+	configFile, err := os.Open(filepath.Join(os.Getenv("HOME"), ".config", "goax", "config.json"))
+	if err != nil {
+		log.Fatal("Couldn't open config file: ", err)
+	}
+
+	var conf config
+	err = json.NewDecoder(configFile).Decode(&conf)
+	if err != nil {
+		log.Fatal("Couldn't decode json config: ", err)
+	}
+
+	parts := strings.SplitN(conf.Jid, "@", 2)
+	if len(parts) != 2 {
+		log.Fatal(errors.New("xmpp: invalid username (want user@domain): " + conf.Jid))
+	}
+	user := parts[0]
+	domain := parts[1]
+
+	host, port, err := xmpp.Resolve(domain)
+	if err != nil {
+		log.Fatalf("Failed to resolve xmpp host for domain %s: %s\n", domain, err)
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+
+	rawCert, err := hex.DecodeString(conf.ServerCertificateSHA256)
+	if err != nil {
+		log.Fatal("Bad server certificate : ", err)
+	}
+
+	cfg := &xmpp.Config{
+		ServerCertificateSHA256: rawCert,
+	}
+
+	xmppClient, err := xmpp.Dial(addr, user, domain, conf.Password, cfg)
+	if err != nil {
+		log.Fatal("Couldn't connect to server: ", err)
+	}
+	xmppClient.SignalPresence("alive")
+
 	// Create ratchet and kx material
 	var priv [32]byte
 	io.ReadFull(rand.Reader, priv[:])
