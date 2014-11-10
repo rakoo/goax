@@ -172,16 +172,6 @@ func send(g *gocui.Gui, v *gocui.View) error {
 		case "connect":
 			g.View("header").Clear()
 			fmt.Fprint(g.View("header"), message)
-		case "identity":
-			fmt.Fprintln(g.View("main"), "Your identity: ")
-			width, _ := g.View("main").Size()
-			for p := 0; p*width < len(kx); p++ {
-				to := (p + 1) * width
-				if to > len(kx) {
-					to = len(kx)
-				}
-				fmt.Fprintln(g.View("main"), kx[p*width:to])
-			}
 		case "q":
 			fallthrough
 		case "quit":
