@@ -75,28 +75,39 @@ func setContact(g *gocui.Gui, v *gocui.View) error {
 	if l, err = v.Line(cy); err != nil {
 		l = ""
 	}
-	header := g.View("header")
-	if header == nil {
-		return errBadInit
+	g.View("header").Clear()
+	fmt.Fprintf(g.View("header"), "Now discussing with %s", l)
+	g.SetCurrentView("input")
+	return nil
+}
+
+func (c contact) String() string {
+	return fmt.Sprintf("%s [%s]", c.jid, c.status)
+}
+
+func setContacts(g *gocui.Gui, contacts map[string]contact) error {
+	g.View("contacts").Clear()
+	for _, c := range contacts {
+		fmt.Fprintln(g.View("contacts"), c)
 	}
-	fmt.Fprintf(header, "Now discussing with %s", l)
+	g.Flush()
 	return nil
 }
 
 func keybindings(g *gocui.Gui) error {
-	if err := g.SetKeybinding("contacts", gocui.KeyCtrlSpace, 0, nextView); err != nil {
+	if err := g.SetKeybinding("", gocui.KeyCtrlSpace, 0, nextView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("", gocui.KeyArrowDown, 0, cursorDown); err != nil {
+	if err := g.SetKeybinding("contacts", gocui.KeyArrowDown, 0, cursorDown); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("", gocui.KeyArrowUp, 0, cursorUp); err != nil {
+	if err := g.SetKeybinding("contacts", gocui.KeyArrowUp, 0, cursorUp); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("", gocui.KeyArrowLeft, 0, cursorLeft); err != nil {
+	if err := g.SetKeybinding("input", gocui.KeyArrowLeft, 0, cursorLeft); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("", gocui.KeyArrowRight, 0, cursorRight); err != nil {
+	if err := g.SetKeybinding("input", gocui.KeyArrowRight, 0, cursorRight); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding("contacts", gocui.KeyEnter, 0, setContact); err != nil {
@@ -109,29 +120,25 @@ func keybindings(g *gocui.Gui) error {
 }
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	if v, err := g.SetView("header", 30, 1, maxX, 3); err != nil {
+	if v, err := g.SetView("header", 60, 1, maxX, 3); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 		fmt.Fprint(v, "Type '/connect jsonstring' to exchange messages with someone")
 		v.Editable = true
 	}
-	if v, err := g.SetView("contacts", -1, 1, 30, maxY); err != nil {
+	if v, err := g.SetView("contacts", -1, 1, 60, maxY); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 		v.Highlight = true
-		fmt.Fprintln(v, "Contact 1")
-		fmt.Fprintln(v, "Contact 2")
-		fmt.Fprintln(v, "Contact 3")
-		fmt.Fprintln(v, "Contact 4")
 	}
-	if _, err := g.SetView("main", 30, 3, maxX, maxY-1); err != nil {
+	if _, err := g.SetView("main", 60, 3, maxX, maxY-1); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 	}
-	if v, err := g.SetView("input", 30, maxY-2, maxX, maxY); err != nil {
+	if v, err := g.SetView("input", 60, maxY-2, maxX, maxY); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
@@ -151,7 +158,7 @@ func send(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	}
 	v.Clear()
-	message = message[:len(message)-1] // Remove trailing 0x00
+	message = strings.Replace(message, string(0x00), "", -1) // Remove trailing 0x00
 	if strings.TrimSpace(message) == "" {
 		return nil
 	}
@@ -180,11 +187,22 @@ func send(g *gocui.Gui, v *gocui.View) error {
 		case "quit":
 			return gocui.ErrorQuit
 		default:
-			fmt.Fprintf(g.View("main"), "! Unknown command: %s", message)
+			fmt.Fprintf(g.View("main"), "! Unknown command: %#v", message)
 		}
 	} else {
 		fmt.Fprintf(g.View("main"), "[%s] > %s\n", time.Now().UTC().Format(time.RFC3339), message)
 	}
 
+	return nil
+}
+
+func debugf(g *gocui.Gui, format string, args ...interface{}) error {
+	fmt.Fprintf(g.View("main"), format, args)
+	g.Flush()
+	return nil
+}
+func debug(g *gocui.Gui, str string) error {
+	fmt.Fprintln(g.View("main"), str)
+	g.Flush()
 	return nil
 }
