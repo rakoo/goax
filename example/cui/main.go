@@ -46,12 +46,7 @@ func statusFromStatus(xstatus string) string {
 
 func main() {
 	var err error
-	var ourJid string
-	xmppClient, ourJid, err = getXmppClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-	resp, _, err := xmppClient.RequestRoster()
+	xmppClient, err = getXmppClient()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -150,35 +145,35 @@ type config struct {
 	ServerCertificateSHA256 string
 }
 
-func getXmppClient() (*xmpp.Conn, string, error) {
+func getXmppClient() (*xmpp.Conn, error) {
 	// The xmpp connection
 	configFile, err := os.Open(filepath.Join(os.Getenv("HOME"), ".config", "goax", "config.json"))
 	if err != nil {
-		return nil, "", fmt.Errorf("Couldn't open config file: %s", err)
+		return nil, fmt.Errorf("Couldn't open config file: %s", err)
 	}
 
 	var conf config
 	err = json.NewDecoder(configFile).Decode(&conf)
 	if err != nil {
-		return nil, "", fmt.Errorf("Couldn't decode json config: %s", err)
+		return nil, fmt.Errorf("Couldn't decode json config: %s", err)
 	}
 
 	parts := strings.SplitN(conf.Jid, "@", 2)
 	if len(parts) != 2 {
-		return nil, "", fmt.Errorf("xmpp: invalid username (want user@domain): %s" + conf.Jid)
+		return nil, fmt.Errorf("xmpp: invalid username (want user@domain): %s" + conf.Jid)
 	}
 	user := parts[0]
 	domain := parts[1]
 
 	host, port, err := xmpp.Resolve(domain)
 	if err != nil {
-		return nil, "", fmt.Errorf("Failed to resolve xmpp host for domain %s: %s", domain, err)
+		return nil, fmt.Errorf("Failed to resolve xmpp host for domain %s: %s", domain, err)
 	}
 	addr := fmt.Sprintf("%s:%d", host, port)
 
 	rawCert, err := hex.DecodeString(conf.ServerCertificateSHA256)
 	if err != nil {
-		return nil, "", fmt.Errorf("Bad server certificate : %s", err)
+		return nil, fmt.Errorf("Bad server certificate : %s", err)
 	}
 
 	logfile, err := os.Create("log")
@@ -189,9 +184,9 @@ func getXmppClient() (*xmpp.Conn, string, error) {
 
 	xmppClient, err := xmpp.Dial(addr, user, domain, conf.Password, cfg)
 	if err != nil {
-		return nil, "", fmt.Errorf("Couldn't connect to server: %s", err)
+		return nil, fmt.Errorf("Couldn't connect to server: %s", err)
 	}
 	xmppClient.SignalPresence("alive")
 
-	return xmppClient, conf.Jid, nil
+	return xmppClient, nil
 }
