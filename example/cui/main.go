@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -21,13 +22,14 @@ import (
 var (
 	privIdentity [32]byte
 
-	// The Key Exchange material marshalled as json
-	kx goax.KeyExchange
-
 	xmppClient *xmpp.Conn
 
 	// contact type indexed by jid
 	contacts map[string]*contact
+)
+
+var (
+	configPath = flag.String("config", filepath.Join(os.Getenv("HOME"), ".config", "goax", "config.json"), "The path to config file")
 )
 
 type axoParams struct {
@@ -42,7 +44,17 @@ type contact struct {
 	status  string
 }
 
-func (c contact) String() string {
+func (c *contact) HasAxo() bool {
+	if c.ratchet == nil {
+		return false
+	}
+
+	_, err := c.ratchet.GetKeyExchangeMaterial()
+	// if err != nil, ratchet is ready
+	return err != nil
+}
+
+func (c *contact) String() string {
 	return c.jid
 }
 
@@ -56,18 +68,14 @@ func statusFromStatus(xstatus string) string {
 }
 
 func main() {
+	flag.Parse()
 	var err error
-	xmppClient, err = getXmppClient()
+	xmppClient, err = getXmppClient(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Create ratchet and kx material
 	io.ReadFull(rand.Reader, privIdentity[:])
-	kx, err := goax.New(rand.Reader, privIdentity).GetKeyExchangeMaterial()
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// The ui
 	g := gocui.NewGui()
@@ -117,12 +125,34 @@ func main() {
 					continue
 				}
 
-				resp := axoQuery{
-					Identity: hex.EncodeToString(kx.IdentityPublic[:]),
-					Dh:       hex.EncodeToString(kx.Dh[:]),
-					Dh1:      hex.EncodeToString(kx.Dh1[:]),
+				c, ok := contacts[v.From]
+				if ok {
+					kx, err := c.ratchet.GetKeyExchangeMaterial()
+					if err != nil {
+						continue
+					}
+					resp := axoQuery{
+						Identity: hex.EncodeToString(kx.IdentityPublic[:]),
+						Dh:       hex.EncodeToString(kx.Dh[:]),
+						Dh1:      hex.EncodeToString(kx.Dh1[:]),
+					}
+					xmppClient.SendIQReply(v.From, "result", v.Id, resp)
 				}
-				xmppClient.SendIQReply(v.From, "result", v.Id, resp)
+			case *xmpp.ClientMessage:
+				raw, err := base64.StdEncoding.DecodeString(v.Body)
+				if err != nil {
+					debugf(g, "! Couldn't base64-decode: %s\n", err)
+					continue
+				}
+				c, ok := contacts[v.From]
+				if ok {
+					decrypted, err := c.ratchet.Decrypt(raw)
+					if err != nil {
+						debugf(g, "! Couldn't decrypt message: %s\n", err)
+						continue
+					}
+					display(g, string(decrypted))
+				}
 			default:
 				debugf(g, "! Got stanza: %v\n", st.Name)
 			}
@@ -155,6 +185,12 @@ type axoQuery struct {
 }
 
 func queryAxo(g *gocui.Gui, to string) error {
+	c, ok := contacts[to]
+	if !ok {
+		return nil
+	}
+	c.ratchet = goax.New(rand.Reader, privIdentity)
+
 	resp, _, err := xmppClient.SendIQ(to, "get", axoQuery{})
 	if err != nil {
 		debugf(g, "! Couldn't query axolotl parameters for %s: %s", to, err)
@@ -196,8 +232,11 @@ func queryAxo(g *gocui.Gui, to string) error {
 		copy(remoteKx.Dh[:], dh)
 		copy(remoteKx.Dh1[:], dh1)
 
-		c.ratchet = goax.New(rand.Reader, privIdentity)
-		c.ratchet.CompleteKeyExchange(*remoteKx)
+		err = c.ratchet.CompleteKeyExchange(*remoteKx)
+		if err != nil {
+			debug(g, err.Error())
+			return nil
+		}
 		setContacts(g, contacts)
 	}
 	return nil
@@ -209,9 +248,9 @@ type config struct {
 	ServerCertificateSHA256 string
 }
 
-func getXmppClient() (*xmpp.Conn, error) {
+func getXmppClient(configPath string) (*xmpp.Conn, error) {
 	// The xmpp connection
-	configFile, err := os.Open(filepath.Join(os.Getenv("HOME"), ".config", "goax", "config.json"))
+	configFile, err := os.Open(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't open config file: %s", err)
 	}

@@ -86,7 +86,7 @@ func setContacts(g *gocui.Gui, contacts map[string]*contact) error {
 	g.View("contacts").Clear()
 	asList := make([]string, 0)
 	for _, c := range contacts {
-		if c.ratchet == nil {
+		if !c.HasAxo() {
 			continue
 		}
 		asList = append(asList, c.String())
@@ -196,6 +196,11 @@ func send(g *gocui.Gui, v *gocui.View) error {
 	}
 
 	return nil
+}
+
+func display(g *gocui.Gui, message string) error {
+	fmt.Fprintf(g.View("main"), "[%s] < %s\n", time.Now().UTC().Format(time.RFC3339), message)
+	return g.Flush()
 }
 
 func debugf(g *gocui.Gui, format string, args ...interface{}) error {
