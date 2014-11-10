@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,13 +82,17 @@ func setContact(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func (c contact) String() string {
-	return fmt.Sprintf("%s [%s]", c.jid, c.status)
-}
-
-func setContacts(g *gocui.Gui, contacts map[string]contact) error {
+func setContacts(g *gocui.Gui, contacts map[string]*contact) error {
 	g.View("contacts").Clear()
+	asList := make([]string, 0)
 	for _, c := range contacts {
+		if c.ratchet == nil {
+			continue
+		}
+		asList = append(asList, c.String())
+	}
+	sort.Strings(asList)
+	for _, c := range asList {
 		fmt.Fprintln(g.View("contacts"), c)
 	}
 	g.Flush()
@@ -180,7 +185,14 @@ func send(g *gocui.Gui, v *gocui.View) error {
 			fmt.Fprintf(g.View("main"), "! Unknown command: %#v", message)
 		}
 	} else {
+		contacts := g.View("contacts")
+		_, cy := contacts.Cursor()
+		contact, err := contacts.Line(cy)
+		if err != nil {
+			return err
+		}
 		fmt.Fprintf(g.View("main"), "[%s] > %s\n", time.Now().UTC().Format(time.RFC3339), message)
+		sendMessage(contact, message)
 	}
 
 	return nil

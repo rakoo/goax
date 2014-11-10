@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -19,20 +19,31 @@ import (
 )
 
 var (
-	ratchet *goax.Ratchet
+	privIdentity [32]byte
 
 	// The Key Exchange material marshalled as json
-	kx string
+	kx goax.KeyExchange
 
 	xmppClient *xmpp.Conn
 
 	// contact type indexed by jid
-	contacts map[string]contact
+	contacts map[string]*contact
 )
 
+type axoParams struct {
+	Identity []byte
+	Dh       []byte
+	Dh1      []byte
+}
+
 type contact struct {
-	jid    string
-	status string
+	ratchet *goax.Ratchet
+	jid     string
+	status  string
+}
+
+func (c contact) String() string {
+	return c.jid
 }
 
 // Convert a xmpp status ("away", "dnd") into a status, defaulting to
@@ -52,19 +63,11 @@ func main() {
 	}
 
 	// Create ratchet and kx material
-	var priv [32]byte
-	io.ReadFull(rand.Reader, priv[:])
-	ratchet = goax.New(rand.Reader, &priv)
-	kxraw, err := ratchet.GetKeyExchangeMaterial()
+	io.ReadFull(rand.Reader, privIdentity[:])
+	kx, err := goax.New(rand.Reader, privIdentity).GetKeyExchangeMaterial()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	marshalled, err := json.Marshal(kxraw)
-	if err != nil {
-		log.Fatal(err)
-	}
-	kx = string(marshalled)
 
 	// The ui
 	g := gocui.NewGui()
@@ -81,23 +84,6 @@ func main() {
 	g.ShowCursor = true
 
 	go func() {
-		roster := <-resp
-		switch v := roster.Value.(type) {
-		case *xmpp.ClientIQ:
-			var roster xmpp.Roster
-			err := xml.NewDecoder(bytes.NewReader(v.Query)).Decode(&roster)
-			if err != nil {
-				debugf(g, "Couldn't decode into a roster: %s\n", err)
-			}
-			contacts = make(map[string]contact)
-			for _, entry := range roster.Item {
-				contacts[entry.Jid] = contact{entry.Jid, "unknown"}
-			}
-			setContacts(g, contacts)
-		}
-	}()
-
-	go func() {
 		for {
 			st, err := xmppClient.Next()
 			if err != nil {
@@ -107,26 +93,36 @@ func main() {
 
 			switch v := st.Value.(type) {
 			case *xmpp.ClientPresence:
-				bare := xmpp.RemoveResourceFromJid(v.From)
-				if bare == ourJid {
-					continue
-				}
 				if len(contacts) == 0 {
-					contacts = make(map[string]contact)
+					contacts = make(map[string]*contact)
 				}
 				c, ok := contacts[v.From]
 				if !ok {
-					contacts[v.From] = contact{v.From, statusFromStatus(v.Status)}
-					setContacts(g, contacts)
-				} else {
-					if v.Type == "error" {
-						delete(contacts, v.From)
-						setContacts(g, contacts)
-					} else if c.status != statusFromStatus(v.Status) {
-						c.status = statusFromStatus(v.Status)
-						setContacts(g, contacts)
+					contacts[v.From] = &contact{
+						jid:    v.From,
+						status: statusFromStatus(v.Status),
 					}
+					go queryAxo(g, v.From)
+					setContacts(g, contacts)
+				} else if c.status != statusFromStatus(v.Status) {
+					go queryAxo(g, v.From)
+					c.status = statusFromStatus(v.Status)
+					setContacts(g, contacts)
 				}
+			case *xmpp.ClientIQ:
+				var q axoQuery
+				err := xml.Unmarshal(v.Query, &q)
+				if err != nil {
+					debugf(g, "! Not an axolotl query: %s\n", string(v.Query))
+					continue
+				}
+
+				resp := axoQuery{
+					Identity: hex.EncodeToString(kx.IdentityPublic[:]),
+					Dh:       hex.EncodeToString(kx.Dh[:]),
+					Dh1:      hex.EncodeToString(kx.Dh1[:]),
+				}
+				xmppClient.SendIQReply(v.From, "result", v.Id, resp)
 			default:
 				debugf(g, "! Got stanza: %v\n", st.Name)
 			}
@@ -137,6 +133,74 @@ func main() {
 	if err != nil && err != gocui.ErrorQuit {
 		log.Panicln(err)
 	}
+}
+
+func sendMessage(to, msg string) error {
+	contact, ok := contacts[to]
+	if !ok {
+		return nil
+	}
+	encrypted := contact.ratchet.Encrypt([]byte(msg))
+	based := base64.StdEncoding.EncodeToString(encrypted)
+	xmppClient.Send(to, based)
+
+	return nil
+}
+
+type axoQuery struct {
+	XMLName  xml.Name `xml:"axolotl"`
+	Identity string   `xml:"identity,omitempty"`
+	Dh       string   `xml:"dh,omitempty"`
+	Dh1      string   `xml:"dh1,omitempty"`
+}
+
+func queryAxo(g *gocui.Gui, to string) error {
+	resp, _, err := xmppClient.SendIQ(to, "get", axoQuery{})
+	if err != nil {
+		debugf(g, "! Couldn't query axolotl parameters for %s: %s", to, err)
+	}
+	response := <-resp
+	switch v := response.Value.(type) {
+	case *xmpp.ClientIQ:
+		if v.Error.Type == "cancel" {
+			return nil
+		}
+
+		c, ok := contacts[v.From]
+		if !ok {
+			return nil
+		}
+
+		var q axoQuery
+		err := xml.Unmarshal(v.Query, &q)
+		if err != nil {
+			debugf(g, "! Not an axolotl query: %s\n", string(v.Query))
+			return nil
+		}
+
+		id, err := hex.DecodeString(q.Identity)
+		if err != nil {
+			return err
+		}
+		dh, err := hex.DecodeString(q.Dh)
+		if err != nil {
+			return err
+		}
+		dh1, err := hex.DecodeString(q.Dh1)
+		if err != nil {
+			return err
+		}
+
+		remoteKx := &goax.KeyExchange{}
+		copy(remoteKx.IdentityPublic[:], id)
+		copy(remoteKx.Dh[:], dh)
+		copy(remoteKx.Dh1[:], dh1)
+
+		c.ratchet = goax.New(rand.Reader, privIdentity)
+		c.ratchet.CompleteKeyExchange(*remoteKx)
+		setContacts(g, contacts)
+	}
+	return nil
 }
 
 type config struct {

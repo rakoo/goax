@@ -121,9 +121,8 @@ func (k *KeyExchange) UnmarshalJSON(in []byte) error {
 // Ratchet contains the per-contact, crypto state.
 type Ratchet struct {
 	// myIdentityPrivate and TheirIdentityPublic contain the primary,
-	// curve25519 identity keys. These are pointers because the canonical
-	// copies live in the client and Contact structs.
-	myIdentityPrivate, theirIdentityPublic *[32]byte
+	// curve25519 identity keys.
+	myIdentityPrivate, theirIdentityPublic [32]byte
 
 	// rootKey gets updated by the DH ratchet.
 	rootKey [32]byte
@@ -169,7 +168,7 @@ func (r *Ratchet) randBytes(buf []byte) {
 	}
 }
 
-func New(rand io.Reader, myPriv *[32]byte) *Ratchet {
+func New(rand io.Reader, myPriv [32]byte) *Ratchet {
 	r := &Ratchet{
 		rand:              rand,
 		kxPrivate0:        new([32]byte),
@@ -194,7 +193,7 @@ func (r *Ratchet) GetKeyExchangeMaterial() (kx KeyExchange, err error) {
 	var public0, public1, myIdentity [32]byte
 	curve25519.ScalarBaseMult(&public0, r.kxPrivate0)
 	curve25519.ScalarBaseMult(&public1, r.kxPrivate1)
-	curve25519.ScalarBaseMult(&myIdentity, r.myIdentityPrivate)
+	curve25519.ScalarBaseMult(&myIdentity, &r.myIdentityPrivate)
 
 	kx = KeyExchange{
 		IdentityPublic: myIdentity,
@@ -246,12 +245,11 @@ func (r *Ratchet) CompleteKeyExchange(kx KeyExchange) error {
 	}
 
 	var myIdentity [32]byte
-	curve25519.ScalarBaseMult(&myIdentity, r.myIdentityPrivate)
+	curve25519.ScalarBaseMult(&myIdentity, &r.myIdentityPrivate)
 
 	if len(kx.IdentityPublic) != len(myIdentity) {
 		return errors.New("Invalid identity length")
 	}
-	r.theirIdentityPublic = new([32]byte)
 	copy(r.theirIdentityPublic[:], kx.IdentityPublic[:])
 
 	var amAlice bool
@@ -273,14 +271,14 @@ func (r *Ratchet) CompleteKeyExchange(kx KeyExchange) error {
 	keyMaterial = append(keyMaterial, sharedKey[:]...)
 
 	if amAlice {
-		curve25519.ScalarMult(&sharedKey, r.myIdentityPrivate, &theirDH)
+		curve25519.ScalarMult(&sharedKey, &r.myIdentityPrivate, &theirDH)
 		keyMaterial = append(keyMaterial, sharedKey[:]...)
-		curve25519.ScalarMult(&sharedKey, r.kxPrivate0, r.theirIdentityPublic)
+		curve25519.ScalarMult(&sharedKey, r.kxPrivate0, &r.theirIdentityPublic)
 		keyMaterial = append(keyMaterial, sharedKey[:]...)
 	} else {
-		curve25519.ScalarMult(&sharedKey, r.kxPrivate0, r.theirIdentityPublic)
+		curve25519.ScalarMult(&sharedKey, r.kxPrivate0, &r.theirIdentityPublic)
 		keyMaterial = append(keyMaterial, sharedKey[:]...)
-		curve25519.ScalarMult(&sharedKey, r.myIdentityPrivate, &theirDH)
+		curve25519.ScalarMult(&sharedKey, &r.myIdentityPrivate, &theirDH)
 		keyMaterial = append(keyMaterial, sharedKey[:]...)
 	}
 
