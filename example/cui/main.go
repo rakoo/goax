@@ -110,13 +110,11 @@ func main() {
 						jid:    v.From,
 						status: statusFromStatus(v.Status),
 					}
-					go queryAxo(g, v.From)
-					setContacts(g, contacts)
 				} else if c.status != statusFromStatus(v.Status) {
-					go queryAxo(g, v.From)
 					c.status = statusFromStatus(v.Status)
-					setContacts(g, contacts)
 				}
+				go queryAxo(g, v.From)
+				setContacts(g, contacts)
 			case *xmpp.ClientIQ:
 				var q axoQuery
 				err := xml.Unmarshal(v.Query, &q)
@@ -126,33 +124,39 @@ func main() {
 				}
 
 				c, ok := contacts[v.From]
-				if ok {
-					kx, err := c.ratchet.GetKeyExchangeMaterial()
-					if err != nil {
-						continue
-					}
-					resp := axoQuery{
-						Identity: hex.EncodeToString(kx.IdentityPublic[:]),
-						Dh:       hex.EncodeToString(kx.Dh[:]),
-						Dh1:      hex.EncodeToString(kx.Dh1[:]),
-					}
-					xmppClient.SendIQReply(v.From, "result", v.Id, resp)
+				if !ok {
+					continue
 				}
+				if c.ratchet == nil {
+					c.ratchet = goax.New(rand.Reader, privIdentity)
+				}
+				kx, err := c.ratchet.GetKeyExchangeMaterial()
+				if err != nil {
+					continue
+				}
+				resp := axoQuery{
+					Identity: hex.EncodeToString(kx.IdentityPublic[:]),
+					Dh:       hex.EncodeToString(kx.Dh[:]),
+					Dh1:      hex.EncodeToString(kx.Dh1[:]),
+				}
+				xmppClient.SendIQReply(v.From, "result", v.Id, resp)
 			case *xmpp.ClientMessage:
+				c, ok := contacts[v.From]
+				if !ok || !c.HasAxo() {
+					continue
+				}
+
 				raw, err := base64.StdEncoding.DecodeString(v.Body)
 				if err != nil {
 					debugf(g, "! Couldn't base64-decode: %s\n", err)
 					continue
 				}
-				c, ok := contacts[v.From]
-				if ok {
-					decrypted, err := c.ratchet.Decrypt(raw)
-					if err != nil {
-						debugf(g, "! Couldn't decrypt message: %s\n", err)
-						continue
-					}
-					display(g, string(decrypted))
+				decrypted, err := c.ratchet.Decrypt(raw)
+				if err != nil {
+					debugf(g, "! Couldn't decrypt message: %s\n", err)
+					continue
 				}
+				displayTimestamped(g, v.From, string(decrypted))
 			default:
 				debugf(g, "! Got stanza: %v\n", st.Name)
 			}

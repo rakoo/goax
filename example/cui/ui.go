@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +15,13 @@ import (
 
 var (
 	errBadInit = errors.New("Bad initialization")
+)
+
+var (
+	// contacts sorted by jid
+	viewJids []string
+
+	jidBuffs map[string][]byte
 )
 
 func nextView(g *gocui.Gui, v *gocui.View) error {
@@ -69,30 +79,42 @@ func cursorRight(g *gocui.Gui, v *gocui.View) error {
 	}
 	return nil
 }
+
 func setContact(g *gocui.Gui, v *gocui.View) error {
-	var l string
-	var err error
 	_, cy := v.Cursor()
-	if l, err = v.Line(cy); err != nil {
-		l = ""
-	}
+	jid := viewJids[cy]
+
 	g.View("header").Clear()
-	fmt.Fprintf(g.View("header"), "Now discussing with %s", l)
+	fmt.Fprintf(g.View("header"), "Now discussing with %s", jid)
+
+	g.View("main").Clear()
+	n, err := io.Copy(g.View("main"), bytes.NewReader(jidBuffs[jid]))
+	if err != nil {
+		log.Printf("Error at copying: %s\n", err)
+		return err
+	}
+	log.Printf("Switched to %s, copied %d bytes\n", jid, n)
+
 	g.SetCurrentView("input")
 	return nil
 }
 
 func setContacts(g *gocui.Gui, contacts map[string]*contact) error {
+	if jidBuffs == nil {
+		jidBuffs = make(map[string][]byte)
+	}
+
 	g.View("contacts").Clear()
-	asList := make([]string, 0)
+	viewJids = make([]string, 1)
+	viewJids[0] = "Home"
 	for _, c := range contacts {
 		if !c.HasAxo() {
 			continue
 		}
-		asList = append(asList, c.String())
+		viewJids = append(viewJids, c.String())
 	}
-	sort.Strings(asList)
-	for _, c := range asList {
+	sort.Strings(viewJids[1:])
+	for _, c := range viewJids {
 		fmt.Fprintln(g.View("contacts"), c)
 	}
 	g.Flush()
@@ -138,10 +160,12 @@ func layout(g *gocui.Gui) error {
 		}
 		v.Highlight = true
 	}
-	if _, err := g.SetView("main", 60, 3, maxX, maxY-1); err != nil {
+	if v, err := g.SetView("main", 60, 3, maxX, maxY-2); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
+		v.Wrap = true
+		v.WrapPrefix = "  "
 	}
 	if v, err := g.SetView("input", 60, maxY-2, maxX, maxY); err != nil {
 		if err != gocui.ErrorUnkView {
@@ -168,6 +192,13 @@ func send(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	}
 
+	contacts := g.View("contacts")
+	_, cy := contacts.Cursor()
+	contact, err := contacts.Line(cy)
+	if err != nil {
+		return err
+	}
+
 	if message[0] == '/' {
 		spl := strings.Split(message[1:], " ")
 		if len(spl) == 0 {
@@ -176,13 +207,12 @@ func send(g *gocui.Gui, v *gocui.View) error {
 		switch spl[0] {
 		case "connect":
 			g.View("header").Clear()
-			fmt.Fprint(g.View("header"), message)
 		case "q":
 			fallthrough
 		case "quit":
 			return gocui.ErrorQuit
 		default:
-			fmt.Fprintf(g.View("main"), "! Unknown command: %#v", message)
+			display(g, contact, fmt.Sprintf("! Unknown command: %#v", message))
 		}
 	} else {
 		contacts := g.View("contacts")
@@ -191,15 +221,43 @@ func send(g *gocui.Gui, v *gocui.View) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(g.View("main"), "[%s] > %s\n", time.Now().UTC().Format(time.RFC3339), message)
-		sendMessage(contact, message)
+		if contact != "Home" {
+			displayTimestamped(g, contact, message)
+			sendMessage(contact, message)
+		}
 	}
 
 	return nil
 }
 
-func display(g *gocui.Gui, message string) error {
-	fmt.Fprintf(g.View("main"), "[%s] < %s\n", time.Now().UTC().Format(time.RFC3339), message)
+func displayTimestamped(g *gocui.Gui, to, message string) error {
+	return display(g, to, fmt.Sprintf("[%s] > %s\n", time.Now().UTC().Format(time.RFC3339), message))
+}
+
+func display(g *gocui.Gui, to, message string) error {
+	log.Printf("Writing in %s...\n", to)
+	// Write in buffer
+	buf, ok := jidBuffs[to]
+	if !ok {
+		jidBuffs[to] = make([]byte, 0)
+		buf = jidBuffs[to]
+	}
+	buf = append(buf, message...)
+	jidBuffs[to] = buf
+	log.Printf("Wrote %d\n", len(message))
+
+	// Is it the current view ?
+	contacts := g.View("contacts")
+	_, cy := contacts.Cursor()
+	contact, err := contacts.Line(cy)
+	if err != nil {
+		return err
+	}
+
+	// If yes, write message in main view
+	if to == contact {
+		fmt.Fprint(g.View("main"), message)
+	}
 	return g.Flush()
 }
 
