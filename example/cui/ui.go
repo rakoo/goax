@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -85,12 +84,7 @@ func setContact(g *gocui.Gui, v *gocui.View) error {
 	jid := viewJids[cy]
 
 	g.View("main").Clear()
-	n, err := io.Copy(g.View("main"), bytes.NewReader(jidBuffs[jid]))
-	if err != nil {
-		log.Printf("Error at copying: %s\n", err)
-		return err
-	}
-	log.Printf("Switched to %s, copied %d bytes\n", jid, n)
+	io.Copy(g.View("main"), bytes.NewReader(jidBuffs[jid]))
 
 	g.SetCurrentView("input")
 	return nil
@@ -223,7 +217,6 @@ func displayTimestamped(g *gocui.Gui, to, message string) error {
 }
 
 func display(g *gocui.Gui, to, message string) error {
-	log.Printf("Writing in %s...\n", to)
 	// Write in buffer
 	buf, ok := jidBuffs[to]
 	if !ok {
@@ -232,7 +225,6 @@ func display(g *gocui.Gui, to, message string) error {
 	}
 	buf = append(buf, message...)
 	jidBuffs[to] = buf
-	log.Printf("Wrote %d\n", len(message))
 
 	// Is it the current view ?
 	contacts := g.View("contacts")
