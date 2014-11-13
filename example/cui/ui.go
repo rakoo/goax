@@ -108,6 +108,14 @@ func setContacts(g *gocui.Gui, contacts map[string]*contact) error {
 	for _, c := range viewJids {
 		fmt.Fprintln(g.View("contacts"), c)
 	}
+
+	// Cleanup buffers
+	for k, _ := range jidBuffs {
+		if _, ok := contacts[k]; !ok {
+			delete(jidBuffs, k)
+		}
+	}
+
 	g.Flush()
 	return nil
 }

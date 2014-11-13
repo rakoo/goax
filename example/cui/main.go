@@ -104,17 +104,30 @@ func main() {
 				if len(contacts) == 0 {
 					contacts = make(map[string]*contact)
 				}
+
+				var wantNewRatchet bool
 				c, ok := contacts[v.From]
-				if !ok {
+				if ok {
+					if v.Type == "unavailable" {
+						log.Printf("%s disconnected\n", v.From)
+						delete(contacts, v.From)
+						setContacts(g, contacts)
+					} else if c.status != statusFromStatus(v.Status) {
+						c.status = statusFromStatus(v.Status)
+						wantNewRatchet = true
+					}
+				} else if v.Type != "unavailable" {
 					contacts[v.From] = &contact{
 						jid:    v.From,
 						status: statusFromStatus(v.Status),
 					}
-				} else if c.status != statusFromStatus(v.Status) {
-					c.status = statusFromStatus(v.Status)
+					setContacts(g, contacts)
+					wantNewRatchet = true
 				}
-				go queryAxo(g, v.From)
-				setContacts(g, contacts)
+
+				if wantNewRatchet {
+					go queryAxo(g, v.From)
+				}
 			case *xmpp.ClientIQ:
 				var q axoQuery
 				err := xml.Unmarshal(v.Query, &q)
