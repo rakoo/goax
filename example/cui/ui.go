@@ -84,9 +84,6 @@ func setContact(g *gocui.Gui, v *gocui.View) error {
 	_, cy := v.Cursor()
 	jid := viewJids[cy]
 
-	g.View("header").Clear()
-	fmt.Fprintf(g.View("header"), "Now discussing with %s", jid)
-
 	g.View("main").Clear()
 	n, err := io.Copy(g.View("main"), bytes.NewReader(jidBuffs[jid]))
 	if err != nil {
@@ -147,27 +144,20 @@ func keybindings(g *gocui.Gui) error {
 }
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	if v, err := g.SetView("header", 60, 1, maxX, 3); err != nil {
-		if err != gocui.ErrorUnkView {
-			return err
-		}
-		fmt.Fprint(v, "Type '/connect jsonstring' to exchange messages with someone")
-		v.Editable = true
-	}
-	if v, err := g.SetView("contacts", -1, 1, 60, maxY); err != nil {
+	if v, err := g.SetView("contacts", 1, 1, 60, maxY-1); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 		v.Highlight = true
 	}
-	if v, err := g.SetView("main", 60, 3, maxX, maxY-2); err != nil {
+	if v, err := g.SetView("main", 60, 1, maxX-1, maxY-3); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 		v.Wrap = true
 		v.WrapPrefix = "  "
 	}
-	if v, err := g.SetView("input", 60, maxY-2, maxX, maxY); err != nil {
+	if v, err := g.SetView("input", 60, maxY-3, maxX-1, maxY-1); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
@@ -205,8 +195,6 @@ func send(g *gocui.Gui, v *gocui.View) error {
 			return nil
 		}
 		switch spl[0] {
-		case "connect":
-			g.View("header").Clear()
 		case "q":
 			fallthrough
 		case "quit":
