@@ -12,43 +12,40 @@ The code includes a simple, stupid demo so you can test it yourself.
 
 THIS IS PURELY EXPERIMENTAL, DON'T TRUST YOUR COMMUNICATIONS WITH IT
 
-# How to use the code
+# How to use the example
 
-In one window:
+The example in `example/cui` is a curses-like xmpp client. You must have
+an xmpp account somewhere. If you don't there are many public providers
+out there happy to host you: check out [this page](https://xmpp.net/directory.php)
 
-  ```shell
-  > cd channelserver
-  > go run main.go
+Once you have an account, you also need contacts to talk to who also use
+this application. You can always add me (rakoo@otokar.looc2011.eu)
+  through "standard" xmpp clients, after which we can discuss through
+  goax protocol. An echobot will surely be spawned someday.
+
+
+To use the application:
+
+1. Compile the code
+2. Create a file called `config.json` next to the executable. It must
+   contain the following data:
+
+  ```json
+  {
+    "jid": "myjid@mydomain.com",
+    "password": "mypassword",
+    "ServerCertificateSHA256": "<base64 certificate of server>"
+  }
   ```
 
-In a 2nd and a 3rd window:
+3. Run the application, you are now in a curses-like application. On the
+   left are all your contacts that can speak goax. On the right is the
+   discussion window. In the bottom is your input.
 
-  ```shell
-  > cd channelclient
-  > go run main.go
-  ```
+4. To go to the contacts window, hit Ctrl-Space. You can select a
+   contact with enter, or go back to input region with Ctrl-Space.
 
-  As explained, you will need to copy the json from the 2nd into the 3rd
-  and vice-versa. The json will look like this:
+5. Once in the input region, you send messages by typing them and
+   hitting Enter.
 
-  ```javascript
-  {"idpub":"79bef716954c767dc641139977d52c57a452ce082d82d689e9cdbfac6810061e","dh":"a8047f6d57f9ef1e9958c53c331e667a06c8c7eeb0e419a4107c159ada8c6d5d","dh1":"59b9acbd0fd8a1fb1a883151a6155d3546e9edb7b03a01394a09193f08268c7d"}
-  ```
-
-In client windows, send messages with
-
-  ```
-  > m hello there !
-
-  > m how are you ?
-  ```
-
-  You can send any number of messages before the other party reads them,
-  because the Axolotl ratchet allows asynchrounous messages. Yay !
-
-  To read messages:
-
-  ```
-  > g
-  < [2014-11-06T22:21:04+01:00] hello there !
-  ```
+6. To leave the application, type `/quit`.
