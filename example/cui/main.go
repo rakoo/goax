@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agl/xmpp"
 	"github.com/jroimartin/gocui"
 	"github.com/rakoo/goax"
+	"github.com/rakoo/xmpp"
 )
 
 var (
@@ -26,6 +26,8 @@ var (
 
 	// contact type indexed by jid
 	contacts map[string]*contact
+
+	fullJid string
 )
 
 var (
@@ -101,6 +103,9 @@ func main() {
 
 			switch v := st.Value.(type) {
 			case *xmpp.ClientPresence:
+				if v.From == fullJid || v.Type == "error" {
+					continue
+				}
 				if len(contacts) == 0 {
 					contacts = make(map[string]*contact)
 				}
@@ -299,8 +304,9 @@ func getXmppClient(configPath string) (*xmpp.Conn, error) {
 
 	logfile, err := os.Create("log")
 	cfg := &xmpp.Config{
-		InLog: logfile,
 		Private: true,
+		OutLog:  logfile,
+		InLog:   logfile,
 		ServerCertificateSHA256: rawCert,
 	}
 
@@ -310,5 +316,6 @@ func getXmppClient(configPath string) (*xmpp.Conn, error) {
 	}
 	xmppClient.SignalPresence("alive")
 
+	fullJid = xmppClient.Jid
 	return xmppClient, nil
 }
