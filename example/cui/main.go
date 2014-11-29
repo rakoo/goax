@@ -199,6 +199,7 @@ type axoQuery struct {
 	Identity string   `xml:"identity,omitempty"`
 	Dh       string   `xml:"dh,omitempty"`
 	Dh1      string   `xml:"dh1,omitempty"`
+	Nonce    string   `xml:"nonce,omitempty"`
 }
 
 func queryAxo(g *gocui.Gui, to string) error {
@@ -299,6 +300,7 @@ func getXmppClient(configPath string) (*xmpp.Conn, error) {
 	logfile, err := os.Create("log")
 	cfg := &xmpp.Config{
 		InLog: logfile,
+		Private: true,
 		ServerCertificateSHA256: rawCert,
 	}
 
