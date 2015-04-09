@@ -4,13 +4,18 @@ A pure-go implementation of the Axolotl ratchet as defined in
 
   https://github.com/trevp/axolotl/wiki
 
-and largely copied from @agl's Pond:
+The actual implementation was written by @agl over here:
 
   https://github.com/agl/pond/tree/master/client/ratchet
 
-The code includes a simple, stupid demo so you can test it yourself.
+Any credits go to him. This repo just extracts all pond-specific parts
+to make Axolotl usable outside of it.
+
+As such, the usual warning:
 
 THIS IS PURELY EXPERIMENTAL, DON'T TRUST YOUR COMMUNICATIONS WITH IT
+
+The code includes a simple, stupid demo so you can test it yourself.
 
 # How to use the example
 
