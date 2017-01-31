@@ -577,3 +577,139 @@ func dup(key *[32]byte) []byte {
 	copy(ret, key[:])
 	return ret
 }
+
+type ratchetState struct {
+	RootKey            []byte                   `json:"root_key,omitempty"`
+	SendHeaderKey      []byte                   `json:"send_header_key,omitempty"`
+	RecvHeaderKey      []byte                   `json:"recv_header_key,omitempty"`
+	NextSendHeaderKey  []byte                   `json:"next_send_header_key,omitempty"`
+	NextRecvHeaderKey  []byte                   `json:"next_recv_header_key,omitempty"`
+	SendChainKey       []byte                   `json:"send_chain_key,omitempty"`
+	RecvChainKey       []byte                   `json:"recv_chain_key,omitempty"`
+	SendRatchetPrivate []byte                   `json:"send_ratchet_private,omitempty"`
+	RecvRatchetPublic  []byte                   `json:"recv_ratchet_public,omitempty"`
+	SendCount          uint32                   `json:"send_count,omitempty"`
+	RecvCount          uint32                   `json:"recv_count,omitempty"`
+	PrevSendCount      uint32                   `json:"prev_send_count,omitempty"`
+	Ratchet            bool                     `json:"ratchet,omitempty"`
+	V2                 bool                     `json:"v2,omitempty"`
+	Private0           []byte                   `json:"private0,omitempty"`
+	Private1           []byte                   `json:"private1,omitempty"`
+	SavedKeys          []ratchetState_SavedKeys `json:"saved_keys,omitempty"`
+	XXX_unrecognized   []byte                   `json:"-"`
+}
+
+type ratchetState_SavedKeys struct {
+	HeaderKey        []byte                              `json:"header_key,omitempty"`
+	MessageKeys      []ratchetState_SavedKeys_MessageKey `json:"message_keys,omitempty"`
+	XXX_unrecognized []byte                              `json:"-"`
+}
+
+type ratchetState_SavedKeys_MessageKey struct {
+	Num              uint32 `json:"num,omitempty"`
+	Key              []byte `json:"key,omitempty"`
+	CreationTime     int64  `json:"creation_time,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (r *Ratchet) MarshalJSON() ([]byte, error) {
+	s := ratchetState{
+		RootKey:            dup(&r.rootKey),
+		SendHeaderKey:      dup(&r.sendHeaderKey),
+		RecvHeaderKey:      dup(&r.recvHeaderKey),
+		NextSendHeaderKey:  dup(&r.nextSendHeaderKey),
+		NextRecvHeaderKey:  dup(&r.nextRecvHeaderKey),
+		SendChainKey:       dup(&r.sendChainKey),
+		RecvChainKey:       dup(&r.recvChainKey),
+		SendRatchetPrivate: dup(&r.sendRatchetPrivate),
+		RecvRatchetPublic:  dup(&r.recvRatchetPublic),
+		SendCount:          r.sendCount,
+		RecvCount:          r.recvCount,
+		PrevSendCount:      r.prevSendCount,
+		Ratchet:            r.ratchet,
+		Private0:           dup(r.kxPrivate0),
+		Private1:           dup(r.kxPrivate1),
+	}
+
+	for headerKey, messageKeys := range r.saved {
+		keys := make([]ratchetState_SavedKeys_MessageKey, 0, len(messageKeys))
+		for messageNum, savedKey := range messageKeys {
+			keys = append(keys, ratchetState_SavedKeys_MessageKey{
+				Num:          messageNum,
+				Key:          dup(&savedKey.key),
+				CreationTime: savedKey.timestamp.Unix(),
+			})
+		}
+		s.SavedKeys = append(s.SavedKeys, ratchetState_SavedKeys{
+			HeaderKey:   dup(&headerKey),
+			MessageKeys: keys,
+		})
+	}
+
+	return json.Marshal(s)
+}
+
+func unmarshalKey(dst *[32]byte, src []byte) bool {
+	if len(src) != 32 {
+		return false
+	}
+	copy(dst[:], src)
+	return true
+}
+
+var badSerialisedKeyLengthErr = errors.New("ratchet: bad serialised key length")
+
+func (r *Ratchet) UnmarshalJSON(in []byte) error {
+	var s ratchetState
+	err := json.Unmarshal(in, &s)
+	if err != nil {
+		return err
+	}
+
+	if !unmarshalKey(&r.rootKey, s.RootKey) ||
+		!unmarshalKey(&r.sendHeaderKey, s.SendHeaderKey) ||
+		!unmarshalKey(&r.recvHeaderKey, s.RecvHeaderKey) ||
+		!unmarshalKey(&r.nextSendHeaderKey, s.NextSendHeaderKey) ||
+		!unmarshalKey(&r.nextRecvHeaderKey, s.NextRecvHeaderKey) ||
+		!unmarshalKey(&r.sendChainKey, s.SendChainKey) ||
+		!unmarshalKey(&r.recvChainKey, s.RecvChainKey) ||
+		!unmarshalKey(&r.sendRatchetPrivate, s.SendRatchetPrivate) ||
+		!unmarshalKey(&r.recvRatchetPublic, s.RecvRatchetPublic) {
+		return badSerialisedKeyLengthErr
+	}
+
+	r.sendCount = s.SendCount
+	r.recvCount = s.RecvCount
+	r.prevSendCount = s.PrevSendCount
+	r.ratchet = s.Ratchet
+
+	if len(s.Private0) > 0 {
+		if !unmarshalKey(r.kxPrivate0, s.Private0) ||
+			!unmarshalKey(r.kxPrivate1, s.Private1) {
+			return badSerialisedKeyLengthErr
+		}
+	} else {
+		r.kxPrivate0 = nil
+		r.kxPrivate1 = nil
+	}
+
+	for _, saved := range s.SavedKeys {
+		var headerKey [32]byte
+		if !unmarshalKey(&headerKey, saved.HeaderKey) {
+			return badSerialisedKeyLengthErr
+		}
+		messageKeys := make(map[uint32]savedKey)
+		for _, messageKey := range saved.MessageKeys {
+			var savedKey savedKey
+			if !unmarshalKey(&savedKey.key, messageKey.Key) {
+				return badSerialisedKeyLengthErr
+			}
+			savedKey.timestamp = time.Unix(messageKey.CreationTime, 0)
+			messageKeys[messageKey.Num] = savedKey
+		}
+
+		r.saved[headerKey] = messageKeys
+	}
+
+	return nil
+}

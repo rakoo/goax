@@ -97,6 +97,21 @@ const (
 	delay
 )
 
+func reinitRatchet(t *testing.T, r *Ratchet) *Ratchet {
+	state, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("Failed to marshal: %s", err)
+	}
+
+	newR := New(rand.Reader, r.myIdentityPrivate)
+	if err := json.Unmarshal(state, newR); err != nil {
+		t.Fatalf("Failed to unmarshal: %s", err)
+	}
+	newR.theirIdentityPublic = r.theirIdentityPublic
+
+	return newR
+}
+
 func testScript(t *testing.T, script []scriptAction) {
 	type delayedMessage struct {
 		msg       []byte
@@ -154,6 +169,8 @@ func testScript(t *testing.T, script []scriptAction) {
 			}
 		}
 
+		a = reinitRatchet(t, a)
+		b = reinitRatchet(t, b)
 	}
 }
 
