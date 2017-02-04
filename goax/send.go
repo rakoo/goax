@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -41,7 +43,14 @@ func send(peer string) {
 		os.Exit(1)
 	}
 
-	log.Println(len(cipherText))
+	encoder, err := armor.Encode(os.Stdout, "GOAX ENCRYPTED MESSAGE", nil)
+	if err != nil {
+		log.Fatal("Couldn't create armor encoder: ", err)
+	}
+
+	io.Copy(encoder, bytes.NewReader(cipherText))
+	encoder.Close()
+	fmt.Println("")
 }
 
 var errNoRatchet = errors.New("No ratchet")
@@ -55,17 +64,17 @@ func openRatchet(peer string) (r *goax.Ratchet, err error) {
 	}
 	defer f.Close()
 
-	r = new(goax.Ratchet)
+	var q goax.Ratchet
 	armorDecoder, err := armor.Decode(f)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error opening decoder")
 	}
-	err = json.NewDecoder(armorDecoder.Body).Decode(r)
+	err = json.NewDecoder(armorDecoder.Body).Decode(&q)
 	if err != nil {
 		return nil, errInvalidRatchet
 	}
 
-	return r, nil
+	return &q, nil
 }
 
 func createRatchet(peer string) (r *goax.Ratchet, err error) {
