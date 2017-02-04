@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -36,7 +37,7 @@ func send(peer string) {
 	cipherText := r.Encrypt(msg)
 	if err := saveRatchet(r, peer); err != nil {
 		log.Println("Couldn't save ratchet:", err)
-		os.Remove(path.Join("ratchets", peer))
+		os.Remove(path.Join("ratchets", hex.EncodeToString([]byte(peer))))
 		os.Exit(1)
 	}
 
@@ -48,7 +49,7 @@ var errNoRatchet = errors.New("No ratchet")
 var errInvalidRatchet = errors.New("Invalid ratchet")
 
 func openRatchet(peer string) (r *goax.Ratchet, err error) {
-	f, err := os.Open(path.Join("ratchets", peer))
+	f, err := os.Open(path.Join("ratchets", hex.EncodeToString([]byte(peer))))
 	if err != nil {
 		return nil, errNoRatchet
 	}
@@ -78,7 +79,7 @@ func createRatchet(peer string) (r *goax.Ratchet, err error) {
 
 func saveRatchet(r *goax.Ratchet, peer string) error {
 	os.MkdirAll("ratchets", 0755)
-	f, err := os.Create(path.Join("ratchets", peer))
+	f, err := os.Create(path.Join("ratchets", hex.EncodeToString([]byte(peer))))
 	if err != nil {
 		return errors.Wrap(err, "Couldn't create ratchet file")
 	}
