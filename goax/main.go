@@ -27,7 +27,17 @@ func main() {
 	case "mykey":
 		printPublicKey()
 	case "send":
+		if len(os.Args) < 3 {
+			fmt.Println("Need email adress of recipient")
+			os.Exit(1)
+		}
+		send(os.Args[2])
 	case "receive":
+		if len(os.Args) < 3 {
+			fmt.Println("Need email adress of sender")
+			os.Exit(1)
+		}
+		//receive(os.Args[2])
 	default:
 		fmt.Println("Unrecognized action:", os.Args[1])
 		fmt.Println("Need one of generate, send or receive")
