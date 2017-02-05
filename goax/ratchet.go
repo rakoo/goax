@@ -23,17 +23,21 @@ func openRatchet(peer string) (r *goax.Ratchet, err error) {
 	}
 	defer f.Close()
 
-	var q goax.Ratchet
+	myIdentityKeyPrivate := getPrivateKey()
+	var asArray [32]byte
+	copy(asArray[:], myIdentityKeyPrivate)
+	r = goax.New(rand.Reader, asArray)
+
 	armorDecoder, err := armor.Decode(f)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error opening decoder")
 	}
-	err = json.NewDecoder(armorDecoder.Body).Decode(&q)
+	err = json.NewDecoder(armorDecoder.Body).Decode(r)
 	if err != nil {
 		return nil, errInvalidRatchet
 	}
 
-	return &q, nil
+	return r, nil
 }
 
 func createRatchet(peer string) (r *goax.Ratchet, err error) {
