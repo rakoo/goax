@@ -28,10 +28,6 @@ func send(peer string) {
 		}
 	}
 
-	if isNew(peer) {
-		sendRatchet(peer)
-	}
-
 	msg, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
 		log.Fatal("Couldn't read all stdin")
@@ -41,6 +37,10 @@ func send(peer string) {
 		log.Println("Couldn't save ratchet:", err)
 		os.Remove(path.Join("ratchets", hex.EncodeToString([]byte(peer))))
 		os.Exit(1)
+	}
+
+	if isNew(peer) {
+		sendRatchet(peer)
 	}
 
 	encoder, err := armor.Encode(os.Stdout, ENCRYPTED_MESSAGE_TYPE, nil)
