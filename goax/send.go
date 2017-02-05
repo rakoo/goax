@@ -39,7 +39,7 @@ func send(peer string) {
 		os.Exit(1)
 	}
 
-	encoder, err := armor.Encode(os.Stdout, "GOAX ENCRYPTED MESSAGE", nil)
+	encoder, err := armor.Encode(os.Stdout, ENCRYPTED_MESSAGE_TYPE, nil)
 	if err != nil {
 		log.Fatal("Couldn't create armor encoder: ", err)
 	}
@@ -62,11 +62,12 @@ func sendRatchet(peer string) {
 	if err != nil {
 		log.Fatal("Couldn't get key exchange material", err)
 	}
-	encoder, err := armor.Encode(os.Stdout, "KEY EXCHANGE MATERIAL", nil)
+	encoder, err := armor.Encode(os.Stdout, KEY_EXCHANGE_TYPE, nil)
 	if err != nil {
 		log.Fatal("Couldn't get armor encoder")
 	}
 
 	json.NewEncoder(encoder).Encode(kx)
 	encoder.Close()
+	fmt.Println("")
 }

@@ -96,3 +96,8 @@ func getPrivateKey() (pkey []byte) {
 	}
 	return private
 }
+
+const (
+	ENCRYPTED_MESSAGE_TYPE string = "GOAX ENCRYPTED MESSAGE"
+	KEY_EXCHANGE_TYPE             = "KEY EXCHANGE MATERIAL"
+)
