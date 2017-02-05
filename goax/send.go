@@ -28,6 +28,10 @@ func send(peer string) {
 		}
 	}
 
+	if isNew(peer) {
+		sendRatchet(peer)
+	}
+
 	msg, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
 		log.Fatal("Couldn't read all stdin")

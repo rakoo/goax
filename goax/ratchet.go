@@ -46,6 +46,7 @@ func createRatchet(peer string) (r *goax.Ratchet, err error) {
 	copy(asArray[:], myIdentityKeyPrivate)
 	r = goax.New(rand.Reader, asArray)
 	err = saveRatchet(r, peer)
+	markAsNew(peer)
 	return r, err
 }
 
@@ -70,4 +71,20 @@ func saveRatchet(r *goax.Ratchet, peer string) error {
 		return errors.Wrap(err, "Couldn't close armor encoder")
 	}
 	return nil
+}
+
+func markAsNew(peer string) {
+	os.MkdirAll("new", 0755)
+	os.Create(path.Join("new", hex.EncodeToString([]byte(peer))))
+}
+
+func isNew(peer string) bool {
+	f, err := os.Open(path.Join("new", hex.EncodeToString([]byte(peer))))
+	defer f.Close()
+
+	return err == nil
+}
+
+func deleteNew(peer string) {
+	os.Remove(path.Join("new", hex.EncodeToString([]byte(peer))))
 }
