@@ -142,9 +142,12 @@ type Ratchet struct {
 	saved map[[32]byte]map[uint32]savedKey
 
 	// kxPrivate0 and kxPrivate1 contain curve25519 private values during
-	// the key exchange phase. They are not valid once key exchange has
-	// completed.
+	// the key exchange phase.
 	kxPrivate0, kxPrivate1 *[32]byte
+
+	// isHandshakeComplete tells if the key exchange was completed in
+	// both directions
+	isHandshakeComplete bool
 
 	rand io.Reader
 }
@@ -186,9 +189,6 @@ func New(rand io.Reader, myPriv [32]byte) *Ratchet {
 // GetKeyExchangeMaterial returns key exchange information from the
 // ratchet.
 func (r *Ratchet) GetKeyExchangeMaterial() (kx KeyExchange, err error) {
-	if r.kxPrivate0 == nil || r.kxPrivate1 == nil {
-		return KeyExchange{}, errors.New("ratchet: handshake already complete")
-	}
 
 	var public0, public1, myIdentity [32]byte
 	curve25519.ScalarBaseMult(&public0, r.kxPrivate0)
@@ -227,11 +227,13 @@ var (
 	chainKeyStepLabel      = []byte("chain key step")
 )
 
+var ErrHandshakeComplete = errors.New("ratchet: handshake already complete")
+
 // CompleteKeyExchange takes a KeyExchange message from the other party and
 // establishes the ratchet.
 func (r *Ratchet) CompleteKeyExchange(kx KeyExchange) error {
-	if r.kxPrivate0 == nil {
-		return errors.New("ratchet: handshake already complete")
+	if r.isHandshakeComplete {
+		return ErrHandshakeComplete
 	}
 
 	var public0 [32]byte
@@ -299,8 +301,7 @@ func (r *Ratchet) CompleteKeyExchange(kx KeyExchange) error {
 	}
 
 	r.ratchet = amAlice
-	r.kxPrivate0 = nil
-	r.kxPrivate1 = nil
+	r.isHandshakeComplete = true
 
 	return nil
 }
@@ -579,24 +580,25 @@ func dup(key *[32]byte) []byte {
 }
 
 type ratchetState struct {
-	RootKey            []byte                   `json:"root_key,omitempty"`
-	SendHeaderKey      []byte                   `json:"send_header_key,omitempty"`
-	RecvHeaderKey      []byte                   `json:"recv_header_key,omitempty"`
-	NextSendHeaderKey  []byte                   `json:"next_send_header_key,omitempty"`
-	NextRecvHeaderKey  []byte                   `json:"next_recv_header_key,omitempty"`
-	SendChainKey       []byte                   `json:"send_chain_key,omitempty"`
-	RecvChainKey       []byte                   `json:"recv_chain_key,omitempty"`
-	SendRatchetPrivate []byte                   `json:"send_ratchet_private,omitempty"`
-	RecvRatchetPublic  []byte                   `json:"recv_ratchet_public,omitempty"`
-	SendCount          uint32                   `json:"send_count,omitempty"`
-	RecvCount          uint32                   `json:"recv_count,omitempty"`
-	PrevSendCount      uint32                   `json:"prev_send_count,omitempty"`
-	Ratchet            bool                     `json:"ratchet,omitempty"`
-	V2                 bool                     `json:"v2,omitempty"`
-	Private0           []byte                   `json:"private0,omitempty"`
-	Private1           []byte                   `json:"private1,omitempty"`
-	SavedKeys          []ratchetState_SavedKeys `json:"saved_keys,omitempty"`
-	XXX_unrecognized   []byte                   `json:"-"`
+	RootKey             []byte                   `json:"root_key,omitempty"`
+	SendHeaderKey       []byte                   `json:"send_header_key,omitempty"`
+	RecvHeaderKey       []byte                   `json:"recv_header_key,omitempty"`
+	NextSendHeaderKey   []byte                   `json:"next_send_header_key,omitempty"`
+	NextRecvHeaderKey   []byte                   `json:"next_recv_header_key,omitempty"`
+	SendChainKey        []byte                   `json:"send_chain_key,omitempty"`
+	RecvChainKey        []byte                   `json:"recv_chain_key,omitempty"`
+	SendRatchetPrivate  []byte                   `json:"send_ratchet_private,omitempty"`
+	RecvRatchetPublic   []byte                   `json:"recv_ratchet_public,omitempty"`
+	SendCount           uint32                   `json:"send_count,omitempty"`
+	RecvCount           uint32                   `json:"recv_count,omitempty"`
+	PrevSendCount       uint32                   `json:"prev_send_count,omitempty"`
+	Ratchet             bool                     `json:"ratchet,omitempty"`
+	V2                  bool                     `json:"v2,omitempty"`
+	Private0            []byte                   `json:"private0,omitempty"`
+	Private1            []byte                   `json:"private1,omitempty"`
+	IsHandshakeComplete bool                     `json:"isHandshakeComplete,omitempty"`
+	SavedKeys           []ratchetState_SavedKeys `json:"saved_keys,omitempty"`
+	XXX_unrecognized    []byte                   `json:"-"`
 }
 
 type ratchetState_SavedKeys struct {
@@ -614,21 +616,22 @@ type ratchetState_SavedKeys_MessageKey struct {
 
 func (r *Ratchet) MarshalJSON() ([]byte, error) {
 	s := ratchetState{
-		RootKey:            dup(&r.rootKey),
-		SendHeaderKey:      dup(&r.sendHeaderKey),
-		RecvHeaderKey:      dup(&r.recvHeaderKey),
-		NextSendHeaderKey:  dup(&r.nextSendHeaderKey),
-		NextRecvHeaderKey:  dup(&r.nextRecvHeaderKey),
-		SendChainKey:       dup(&r.sendChainKey),
-		RecvChainKey:       dup(&r.recvChainKey),
-		SendRatchetPrivate: dup(&r.sendRatchetPrivate),
-		RecvRatchetPublic:  dup(&r.recvRatchetPublic),
-		SendCount:          r.sendCount,
-		RecvCount:          r.recvCount,
-		PrevSendCount:      r.prevSendCount,
-		Ratchet:            r.ratchet,
-		Private0:           dup(r.kxPrivate0),
-		Private1:           dup(r.kxPrivate1),
+		RootKey:             dup(&r.rootKey),
+		SendHeaderKey:       dup(&r.sendHeaderKey),
+		RecvHeaderKey:       dup(&r.recvHeaderKey),
+		NextSendHeaderKey:   dup(&r.nextSendHeaderKey),
+		NextRecvHeaderKey:   dup(&r.nextRecvHeaderKey),
+		SendChainKey:        dup(&r.sendChainKey),
+		RecvChainKey:        dup(&r.recvChainKey),
+		SendRatchetPrivate:  dup(&r.sendRatchetPrivate),
+		RecvRatchetPublic:   dup(&r.recvRatchetPublic),
+		SendCount:           r.sendCount,
+		RecvCount:           r.recvCount,
+		PrevSendCount:       r.prevSendCount,
+		Ratchet:             r.ratchet,
+		Private0:            dup(r.kxPrivate0),
+		Private1:            dup(r.kxPrivate1),
+		IsHandshakeComplete: r.isHandshakeComplete,
 	}
 
 	for headerKey, messageKeys := range r.saved {
@@ -682,6 +685,7 @@ func (r *Ratchet) UnmarshalJSON(in []byte) error {
 	r.recvCount = s.RecvCount
 	r.prevSendCount = s.PrevSendCount
 	r.ratchet = s.Ratchet
+	r.isHandshakeComplete = s.IsHandshakeComplete
 
 	if len(s.Private0) > 0 {
 		if !unmarshalKey(r.kxPrivate0, s.Private0) ||
