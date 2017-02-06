@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/rakoo/goax"
 	"golang.org/x/crypto/openpgp/armor"
 )
 
@@ -20,7 +21,15 @@ func send(peer string) {
 		if err == errNoRatchet {
 			fmt.Printf("No ratchet for %s, please send this to the peer and \"receive\" what they send you back", peer)
 			fmt.Println("\n")
-			sendRatchet(peer)
+			r, err := createRatchet(peer)
+			if err != nil {
+				log.Fatalf("Couldn't create ratchet for %s: %s", peer, err)
+			}
+			err = saveRatchet(r, peer)
+			if err != nil {
+				log.Fatal("Couldn't save ratchet, will have to try another time", err)
+			}
+			sendRatchet(r)
 			fmt.Println("")
 			os.Exit(0)
 		} else {
@@ -40,7 +49,7 @@ func send(peer string) {
 	}
 
 	if isNew(peer) {
-		sendRatchet(peer)
+		sendRatchet(r)
 	}
 
 	encoder, err := armor.Encode(os.Stdout, ENCRYPTED_MESSAGE_TYPE, nil)
@@ -53,18 +62,10 @@ func send(peer string) {
 	fmt.Println("")
 }
 
-func sendRatchet(peer string) {
-	r, err := createRatchet(peer)
-	if err != nil {
-		log.Fatalf("Couldn't create ratchet for %s: %s", peer, err)
-	}
-	err = saveRatchet(r, peer)
-	if err != nil {
-		log.Fatal("Couldn't save ratchet, will have to try another time", err)
-	}
+func sendRatchet(r *goax.Ratchet) {
 	kx, err := r.GetKeyExchangeMaterial()
 	if err != nil {
-		log.Fatal("Couldn't get key exchange material", err)
+		log.Fatal("Couldn't get key exchange material ", err)
 	}
 	encoder, err := armor.Encode(os.Stdout, KEY_EXCHANGE_TYPE, nil)
 	if err != nil {
