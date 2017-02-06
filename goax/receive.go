@@ -51,13 +51,14 @@ func receive(peer string) {
 			if err != nil {
 				log.Fatal("Couldn't decrypt message: ", err)
 			}
+			fmt.Println("")
 			io.Copy(os.Stdout, bytes.NewReader(plaintext))
 			deleteNew(peer)
 		case KEY_EXCHANGE_TYPE:
 			var kx goax.KeyExchange
 			json.NewDecoder(armorDecoder.Body).Decode(&kx)
 			err = r.CompleteKeyExchange(kx)
-			if err != nil {
+			if err != nil && err != goax.ErrHandshakeComplete {
 				log.Fatal("Invalid key exchange material: ", err)
 			}
 			saveRatchet(r, peer)
