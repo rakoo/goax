@@ -469,6 +469,10 @@ func isZeroKey(key *[32]byte) bool {
 }
 
 func (r *Ratchet) Decrypt(ciphertext []byte) ([]byte, error) {
+	if !r.isHandshakeComplete {
+		return nil, errors.New("handshake not complete yet")
+	}
+
 	msg, err := r.trySavedKeys(ciphertext)
 	if err != nil || msg != nil {
 		return msg, err

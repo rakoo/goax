@@ -248,3 +248,24 @@ func TestMarshal(t *testing.T) {
 		t.Fatalf("IdentityPublic doesn't match; expected %x, got %x\n", kx.IdentityPublic, kxActual.IdentityPublic)
 	}
 }
+
+func TestCantDecryptUntilHandshakeComplete(t *testing.T) {
+	var privA [32]byte
+	io.ReadFull(rand.Reader, privA[:])
+	a := New(rand.Reader, privA)
+	kx, err := a.GetKeyExchangeMaterial()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var privB [32]byte
+	io.ReadFull(rand.Reader, privB[:])
+	b := New(rand.Reader, privB)
+	b.CompleteKeyExchange(kx)
+	msg := b.Encrypt([]byte("some message"))
+
+	// a hasn't finished handshake yet, decrypting is not allowed
+	if _, err := a.Decrypt(msg); err == nil {
+		t.Fatal("shouldn't be able to decrypt yet")
+	}
+}
