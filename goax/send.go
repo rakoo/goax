@@ -19,7 +19,7 @@ func send(peer string) {
 	r, err := openRatchet(peer)
 	if err != nil {
 		if err == errNoRatchet {
-			fmt.Printf("No ratchet for %s, please send this to the peer and \"receive\" what they send you back", peer)
+			fmt.Fprintf(os.Stderr, "No ratchet for %s, please send this to the peer and \"receive\" what they send you back", peer)
 			fmt.Println("\n")
 			r, err := createRatchet(peer)
 			if err != nil {
@@ -37,6 +37,7 @@ func send(peer string) {
 		}
 	}
 
+	fmt.Println("")
 	msg, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
 		log.Fatal("Couldn't read all stdin")
