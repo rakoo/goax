@@ -16,17 +16,21 @@ import (
 )
 
 func receive(peer string) {
-	r, err := openRatchet(peer)
-	if err != nil {
-		if err == errNoRatchet {
-			fmt.Fprintf(os.Stderr, "No ratchet for %s, creating one.\n", peer)
-			r, err = createRatchet(peer)
-			if err != nil {
-				log.Fatal("Couldn't create ratchet:", err)
+	getRatchet := func(peer string) (r *goax.Ratchet) {
+		r, err := openRatchet(peer)
+		if err != nil {
+			if err == errNoRatchet {
+				fmt.Fprintf(os.Stderr, "No ratchet for %s, creating one.\n", peer)
+				r, err = createRatchet(peer)
+				if err != nil {
+					log.Fatal("Couldn't create ratchet:", err)
+				}
+			} else {
+				log.Fatal(err)
 			}
-		} else {
-			log.Fatal(err)
 		}
+		return r
+
 	}
 
 	stat, err := os.Stdin.Stat()
@@ -43,6 +47,7 @@ func receive(peer string) {
 	}
 
 	blockScanner := newBlockSplitter(stdin)
+	var scannedSomething bool
 	for blockScanner.Scan() {
 		armorDecoder, err := armor.Decode(strings.NewReader(blockScanner.Text()))
 		if err != nil {
@@ -54,6 +59,7 @@ func receive(peer string) {
 			if err != nil {
 				log.Fatal("Couldn't read message: ", err)
 			}
+			r := getRatchet(peer)
 			plaintext, err := r.Decrypt(msg)
 			if err != nil {
 				log.Fatal("Couldn't decrypt message: ", err)
@@ -61,7 +67,9 @@ func receive(peer string) {
 			fmt.Println("")
 			io.Copy(os.Stdout, bytes.NewReader(plaintext))
 			deleteNew(peer)
+			scannedSomething = true
 		case KEY_EXCHANGE_TYPE:
+			r := getRatchet(peer)
 			var kx goax.KeyExchange
 			json.NewDecoder(armorDecoder.Body).Decode(&kx)
 			err = r.CompleteKeyExchange(kx)
@@ -69,12 +77,17 @@ func receive(peer string) {
 				log.Fatal("Invalid key exchange material: ", err)
 			}
 			saveRatchet(r, peer)
+			scannedSomething = true
 		default:
 			log.Println("Unknown block type: ", armorDecoder.Type)
 		}
 	}
 	if err := blockScanner.Err(); err != nil {
 		log.Fatal("Error scanning blocks: ", err)
+	}
+	if !scannedSomething {
+		fmt.Fprintln(os.Stderr, "The input you provided is invalid")
+		os.Exit(1)
 	}
 }
 
