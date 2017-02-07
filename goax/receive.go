@@ -19,7 +19,7 @@ func receive(peer string) {
 	r, err := openRatchet(peer)
 	if err != nil {
 		if err == errNoRatchet {
-			fmt.Printf("No ratchet for %s, creating one\n\n", peer)
+			fmt.Fprintf(os.Stderr, "No ratchet for %s, creating one.\n", peer)
 			r, err = createRatchet(peer)
 			if err != nil {
 				log.Fatal("Couldn't create ratchet:", err)
@@ -29,7 +29,14 @@ func receive(peer string) {
 		}
 	}
 
-	fmt.Println("Please paste in the message; when done, hit Ctrl-D")
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		log.Fatal("Couldn't stat stdin")
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		// stdin is from a terminal, not from a pipe
+		fmt.Fprintln(os.Stderr, "Please paste in the message; when done, hit Ctrl-D\n")
+	}
 	stdin, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
 		log.Fatal("Couldn't read from stdin: ", err)
