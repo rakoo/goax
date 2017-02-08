@@ -11,7 +11,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/rakoo/goax"
+	"github.com/rakoo/goax/pkg/ratchet"
+
 	"golang.org/x/crypto/openpgp/armor"
 )
 
@@ -63,7 +64,7 @@ func send(peer string) {
 	fmt.Println("")
 }
 
-func sendRatchet(r *goax.Ratchet) {
+func sendRatchet(r *ratchet.Ratchet) {
 	kx, err := r.GetKeyExchangeMaterial()
 	if err != nil {
 		log.Fatal("Couldn't get key exchange material ", err)

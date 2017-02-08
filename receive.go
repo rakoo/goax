@@ -11,12 +11,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rakoo/goax"
+	"github.com/rakoo/goax/pkg/ratchet"
 	"golang.org/x/crypto/openpgp/armor"
 )
 
 func receive(peer string) {
-	getRatchet := func(peer string) (r *goax.Ratchet) {
+	getRatchet := func(peer string) (r *ratchet.Ratchet) {
 		r, err := openRatchet(peer)
 		if err != nil {
 			if err == errNoRatchet {
@@ -70,10 +70,10 @@ func receive(peer string) {
 			scannedSomething = true
 		case KEY_EXCHANGE_TYPE:
 			r := getRatchet(peer)
-			var kx goax.KeyExchange
+			var kx ratchet.KeyExchange
 			json.NewDecoder(armorDecoder.Body).Decode(&kx)
 			err = r.CompleteKeyExchange(kx)
-			if err != nil && err != goax.ErrHandshakeComplete {
+			if err != nil && err != ratchet.ErrHandshakeComplete {
 				log.Fatal("Invalid key exchange material: ", err)
 			}
 			saveRatchet(r, peer)
