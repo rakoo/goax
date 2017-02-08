@@ -1,56 +1,166 @@
 # Goax
 
-A pure-go implementation of the Axolotl ratchet as defined in
+A pure-go implementation of the Signal protocol as defined in
 
-  https://github.com/trevp/axolotl/wiki
+https://en.wikipedia.org/wiki/Signal_Protocol
 
 The actual implementation was written by @agl over here:
 
   https://github.com/agl/pond/tree/master/client/ratchet
 
 Any credits go to him. This repo just extracts all pond-specific parts
-to make Axolotl usable outside of it.
+to make the protocol usable outside of it.
 
 As such, the usual warning:
 
 THIS IS PURELY EXPERIMENTAL, DON'T TRUST YOUR COMMUNICATIONS WITH IT
 
-The code includes a simple, stupid demo so you can test it yourself.
+# What it is
 
-# How to use the example
+Goax is an attempt at using the Signal protocol from the command line.
+The goal is to have a UX as simple as possible so that making mistakes
+is hard. It doesn't do any network communication, that's the part where
+you, the user, interact by copy-pasting goax's inputs and outputs
+through the medium of your choice.
 
-The example in `example/cui` is a curses-like xmpp client. You must have
-an xmpp account somewhere. If you don't there are many public providers
-out there happy to host you: check out [this page](https://xmpp.net/directory.php)
+# How to use
 
-Once you have an account, you also need contacts to talk to who also use
-this application. You can always add me (rakoo@otokar.looc2011.eu)
-  through "standard" xmpp clients, after which we can discuss through
-  goax protocol. An echobot will surely be spawned someday.
+goax is an extremely simple attempt at Forward Secure communications on
+the command line. All it does is print armor-encoded blocks of text that
+you copy-paste into the medium of your choice (email, IM, ...)
 
+The first thing to do is to build the binary and put it in its own
+folder
 
-To use the application:
+```shell
+$ go build
+$ cp goax /tmp/comms
+$ cd /tmp/comms
+```
 
-1. Compile the code
-2. Create a file called `config.json` next to the executable. It must
-   contain the following data:
+Once there, it will create some files in the directory. Don't bother
+about them.
 
-  ```json
-  {
-    "jid": "myjid@mydomain.com",
-    "password": "mypassword",
-    "ServerCertificateSHA256": "<base64 certificate of server>"
-  }
-  ```
+Now that it's there you will want to run it, just to see what it does
 
-3. Run the application, you are now in a curses-like application. On the
-   left are all your contacts that can speak goax. On the right is the
-   discussion window. In the bottom is your input.
+```shell
+$ ./goax
+Need an action: one of mykey, send or receive
+```
 
-4. To go to the contacts window, hit Ctrl-Space. You can select a
-   contact with enter, or go back to input region with Ctrl-Space.
+Let's see what our key is:
 
-5. Once in the input region, you send messages by typing them and
-   hitting Enter.
+```shell
+$ ./goax mykey
+2JC2HDtUfBwxMGq4Bkj1DcAiGB2WQ3eByJ9jhyukDMob
+```
 
-6. To leave the application, type `/quit`.
+Of course your key will differ. It is automatically created if it
+doesn't exist (it's just a file in the current directory). Run it again;
+the key should be the same.
+This is your *identity key*. It uniquely identifies this instance of
+goax. Delete the `key` file and you have another instance with another
+identity; run goax from another directory and you have another instance
+with another identity.
+
+Now that we have an identity, we probably want to send some message to
+someone. The first step is to try to send them something. Let's suppose
+they are named Barry:
+
+```shell
+$ ./goax send barry
+No ratchet for barry, please send this to the peer and "receive" what they send you back
+
+-----BEGIN KEY EXCHANGE MATERIAL-----
+
+eyJpZHB1YiI6IjEzNDMwNWZiNmRlMmU3YTc1NmU5NmRiODI0YmRkYjNkMzA4MTE1
+OGRhNzkwZjZiYjUwZGZjZmM3YTI4MDYxNmUiLCJkaCI6ImU1YTYyNDU4ZjJmYWQ2
+YTdkNWI2Y2ZkYjI1NWNhZDViNzg4YzVlMDNiNWYxMWY1NWFhYWRjYzk0NTY4Mjc2
+MjUiLCJkaDEiOiI1MmFmOGYxNTRiZDk0ZDExNGE1ZjljMWIxMWQxOTMxYTU5Mjhm
+Y2MwODY2NDE2NzczZGIwNGRkYmFhNGVmMzBhIn0K
+=Xccr
+-----END KEY EXCHANGE MATERIAL-----
+```
+
+What happened is that since it is the very first time that goax hears
+about a "barry", it will create a ratchet (which is some internal state)
+for them, and create a *key exchange material*. The details of what it
+is aren't important; all you have to do is copy-paste the block
+(including the -----BEGIN KEY EXCHANGE MATERIAL----- and
+ -----END KEY EXCHANGE MATERIAL---- lines) and send it to barry. This
+material serves to make a handshake with them; you have to send your
+part to them, and they have to send their part to you.
+
+Note that the argument `barry` is just a string; goax has no idea what
+it means. It could very well be an email address (b@rry.com) or a
+twitter handle (@rryb) or an ICQ handle. Every "recipient" is considered
+a different conversation between your identity key and their identity
+key.
+
+We have sent them the block, and they have done the same on their side
+and sent us their block. Here's how we finish the handshake (they should
+do the same on their side as well)
+
+```shell
+$ ./goax receive barry
+Please paste in the message; when done, hit Ctrl-D
+
+-----BEGIN KEY EXCHANGE MATERIAL-----
+
+eyJpZHB1YiI6IjEzNDMwNWZiNmRlMmU3YTc1NmU5NmRiODI0YmRkYjNkMzA4MTE1
+OGRhNzkwZjZiYjUwZGZjZmM3YTI4MDYxNmUiLCJkaCI6Ijc3N2FhNWY0ZmI1NmRl
+NTQ4YzI4ZDhmNDIxMjQ3ZDg3YjhkNWI0ZDhiN2I4NjY5NTRlNGZhNTVjOWQ5YjZj
+NWMiLCJkaDEiOiJlZTQ4NzYyNDA3NmJmN2JlZmQwYmJiZjkwYWY3MGZjNDlhOGI2
+NjA4MmU0Zjg4ODAzZTExZTNkMWQ2YzlhMjIxIn0K
+=I2pa
+-----END KEY EXCHANGE MATERIAL-----
+^D
+$
+```
+
+The command didn't throw anything at us; the handshake is done and we
+can now start sending messages ! (Hit Ctrl-D on an empty line when you
+are done writing your message)
+
+```shell
+$ ./goax send barry
+
+Hello from goax !
+^D
+-----BEGIN GOAX ENCRYPTED MESSAGE-----
+
+PvEwrQH8CFR9URIRX63SQtBA/BxoAIze/Higmkf54FYswgy5YzYIbiz6/n54dy/o
+aLcVeAz2HA+5rReJHeVU5iNNd06BMlPzFxJCp21ssgiiVgSivPHb1/2mv8KMaqK8
+cATkOxjryH6xEXmCRWPKTVJVZre2MwgiETdlJkqVwZjcnD7nJogXx2uq
+=KNWM
+-----END GOAX ENCRYPTED MESSAGE-----
+```
+
+This new block type is the actual encrypted message; send that to barry,
+and they can read your message:
+
+```shell
+# From barry's shell
+barry$ ./goax receive anon
+Please paste in the message; when done, hit Ctrl-D
+
+-----BEGIN GOAX ENCRYPTED MESSAGE-----
+
+PvEwrQH8CFR9URIRX63SQtBA/BxoAIze/Higmkf54FYswgy5YzYIbiz6/n54dy/o
+aLcVeAz2HA+5rReJHeVU5iNNd06BMlPzFxJCp21ssgiiVgSivPHb1/2mv8KMaqK8
+cATkOxjryH6xEXmCRWPKTVJVZre2MwgiETdlJkqVwZjcnD7nJogXx2uq
+=KNWM
+-----END GOAX ENCRYPTED MESSAGE-----
+^D
+
+Hello from goax !
+
+barry $
+```
+
+Happy communicating !
+
+And remember: goax hasn't been audited or analyzed by any competent
+cryptographer mind and probably contains multiple issues. Most notably
+there is no way for a user to verify the identity of a peer. Don't
+expect it to save your life.
