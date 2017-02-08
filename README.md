@@ -164,3 +164,68 @@ And remember: goax hasn't been audited or analyzed by any competent
 cryptographer mind and probably contains multiple issues. Most notably
 there is no way for a user to verify the identity of a peer. Don't
 expect it to save your life.
+
+# Alternative flow: sending messages before receiving any of them
+
+The Signal protocol handshake has been built with asynchronicity in
+mind. If you read carefully the previous section, a handshake doesn't
+need both peers to be actually discussing, they don't need to be on at
+the same time. This means that it is perfectly fine to receive barry's
+key exchange material, complete the handshake on our side, and start
+sending messages straight away !
+
+```shell
+$ ./goax receive barry
+Please paste in the message; when done, hit Ctrl-D
+
+-----BEGIN KEY EXCHANGE MATERIAL-----
+
+eyJpZHB1YiI6IjEzNDMwNWZiNmRlMmU3YTc1NmU5NmRiODI0YmRkYjNkMzA4MTE1
+OGRhNzkwZjZiYjUwZGZjZmM3YTI4MDYxNmUiLCJkaCI6ImY1NjU1MGU4MDYxYWE5
+ZmNhM2QzM2UwNzYyMzI1ZWRhNDNhZGU2NDNhYzNlY2M3NWNiNGRkOTg3ZTEyMGFj
+NDQiLCJkaDEiOiI0NDEyZDAyMTFhNDNiNDY5NjhlMTQ1MDQxZWZkZWY2ZDAyM2Jj
+ZWM1ODAxMjA5NzFlMjc3ZWU1ODU3MmJjZTJiIn0K
+=ossT
+-----END KEY EXCHANGE MATERIAL-----
+No ratchet for barry, creating one.
+
+```
+
+In this particular case, we didn't even know that barry existed; maybe
+they wanted to talk to us ? In any case, the handshake is complete *on
+our side*, so we can start sending messages straight away:
+
+```shell
+./goax send barry
+
+Happy to hear from you !
+^D
+-----BEGIN KEY EXCHANGE MATERIAL-----
+
+eyJpZHB1YiI6IjEzNDMwNWZiNmRlMmU3YTc1NmU5NmRiODI0YmRkYjNkMzA4MTE1
+OGRhNzkwZjZiYjUwZGZjZmM3YTI4MDYxNmUiLCJkaCI6ImFmZTY1YjRhYWQzNzkw
+OWY0MzQ3MGE3NDFlN2UyOWY1YjBlM2Q1NjViMjExZGUwNzVmODJiZGZiNTAwZTU4
+NWMiLCJkaDEiOiJlODE0NTNkMDZlZWYxOTE1MjlkMGM1ZjcxYjgwNDRjYzA0NTc4
+ZjliM2U5MjBkZWMzMDhiN2RkM2JkYzdlNDI2In0K
+=QhHJ
+-----END KEY EXCHANGE MATERIAL-----
+-----BEGIN GOAX ENCRYPTED MESSAGE-----
+
+ERXsufvBbGhICLZt5CBXrTZsRIKvVt0TKTRi05erz6aRkgIS/a9OYzvUm5wk40To
+Payo6OYQOx8b1Hkqee4iNCzeiE+tEMVXBZEtI+AuZtNUIolRDtpI9vudH2XgYgkR
+4hr9WnYbtCB1mOMvqHh0OA6LKd2aV3QDzmbC/7BknzBCEUTHLMA0jzGuV410j0VU
+NA==
+=w59U
+-----END GOAX ENCRYPTED MESSAGE-----
+
+$ 
+```
+
+Since we're not sure that barry has finished the handshake on their
+side, it is safe to send them key exchange material again. Just copy
+paste the 2 blocks and send them; barry will `receive` all of it and
+goax will make what is necessary.
+
+At a later time, when barry sends us a message and we successfully
+decrypt it, we have 100% assurance that they have finished the handshake
+on their side; goax won't output the key exchange material anymore.
