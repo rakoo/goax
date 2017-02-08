@@ -228,6 +228,7 @@ var (
 )
 
 var ErrHandshakeComplete = errors.New("ratchet: handshake already complete")
+var ErrHandshakeNotComplete = errors.New("ratchet: handshake not complete yet")
 
 // CompleteKeyExchange takes a KeyExchange message from the other party and
 // establishes the ratchet.
@@ -306,8 +307,14 @@ func (r *Ratchet) CompleteKeyExchange(kx KeyExchange) error {
 	return nil
 }
 
-// Encrypt acts like append() but appends an encrypted version of msg to out.
-func (r *Ratchet) Encrypt(msg []byte) []byte {
+// Encrypt acts like append() but appends an encrypted version of msg to
+// out. If the handshake is not complete yet, the error will be
+// ErrHandshakeNotComplete; otherwise it is nil.
+func (r *Ratchet) Encrypt(msg []byte) ([]byte, error) {
+	if !r.isHandshakeComplete {
+		return nil, ErrHandshakeNotComplete
+	}
+
 	if r.ratchet {
 		r.randBytes(r.sendRatchetPrivate[:])
 		copy(r.sendHeaderKey[:], r.nextSendHeaderKey[:])
@@ -348,7 +355,7 @@ func (r *Ratchet) Encrypt(msg []byte) []byte {
 	copy(out, headerNonce[:])
 	out = secretbox.Seal(out, header[:], &headerNonce, &r.sendHeaderKey)
 	r.sendCount++
-	return secretbox.Seal(out, msg, &messageNonce, &messageKey)
+	return secretbox.Seal(out, msg, &messageNonce, &messageKey), nil
 }
 
 // trySavedKeys tries to decrypt ciphertext using keys saved for missing messages.
@@ -470,7 +477,7 @@ func isZeroKey(key *[32]byte) bool {
 
 func (r *Ratchet) Decrypt(ciphertext []byte) ([]byte, error) {
 	if !r.isHandshakeComplete {
-		return nil, errors.New("handshake not complete yet")
+		return nil, ErrHandshakeNotComplete
 	}
 
 	msg, err := r.trySavedKeys(ciphertext)

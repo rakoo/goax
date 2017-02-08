@@ -32,7 +32,7 @@ func send(peer string) {
 			}
 			sendRatchet(r)
 			fmt.Println("")
-			os.Exit(0)
+			return
 		} else {
 			log.Fatal(err)
 		}
@@ -43,7 +43,19 @@ func send(peer string) {
 	if err != nil {
 		log.Fatal("Couldn't read all stdin")
 	}
-	cipherText := r.Encrypt(msg)
+	fmt.Println("")
+	cipherText, err := r.Encrypt(msg)
+	if err != nil {
+		if err == ratchet.ErrHandshakeNotComplete {
+			fmt.Fprintf(os.Stderr, "\nSorry, the handshake is not complete yet; you can't send any messages. Please ask %s for their key exchange material and use \"goax receive %s\" to finish handshake.\n", peer, peer)
+			fmt.Fprintf(os.Stderr, "Here's your own key exchange material, in case you want to send it again to them:\n\n")
+			sendRatchet(r)
+			os.Exit(1)
+		} else {
+			log.Fatal(err)
+		}
+	}
+
 	if err := saveRatchet(r, peer); err != nil {
 		log.Println("Couldn't save ratchet:", err)
 		os.Remove(path.Join("ratchets", hex.EncodeToString([]byte(peer))))
